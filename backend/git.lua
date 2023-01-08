@@ -111,7 +111,7 @@ function Git:get_branch(directory, callback)
       end
     end
     callback(branch)
-  end, directory, "rev-parse", "--abbrev-ref", "HEAD")
+  end, directory, "--no-optional-locks", "rev-parse", "--abbrev-ref", "HEAD")
 end
 
 ---@param directory string
@@ -157,7 +157,7 @@ function Git:get_changes(directory, callback)
       end
       self:add_to_cache("get_changes", changes, directory)
       callback(changes)
-    end, directory, "status", "--short")
+    end, directory, "--no-optional-locks", "status", "--short")
   end)
 end
 
@@ -232,7 +232,7 @@ function Git:get_stats(directory, callback)
       end
     end
     callback({inserts = inserts, deletes = deletes})
-  end, directory, "diff", "--numstat")
+  end, directory, "--no-optional-locks", "diff", "--numstat")
 end
 
 ---@param directory string Project directory

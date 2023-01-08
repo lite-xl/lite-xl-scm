@@ -140,8 +140,6 @@ local function update_doc_status(path, nonblocking)
     if not nonblocking then backend:set_blocking_mode(true) end
     backend:get_file_status(path, project_dir, function(status)
       if status and status ~= "" then
-        print (path)
-        print (status)
         local color
         if status == "added" then
           color = style.good
