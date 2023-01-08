@@ -23,7 +23,7 @@ local StatusView = require "core.statusview"
 local ReadDoc = require "plugins.scm.readdoc"
 local Git = require "plugins.scm.backend.git"
 local Fossil = require "plugins.scm.backend.fossil"
-local MessageBox = require "widget.messagebox"
+local MessageBox = require "libraries.widget.messagebox"
 
 ---@class config.plugins.smc
 ---@field highlighter boolean
