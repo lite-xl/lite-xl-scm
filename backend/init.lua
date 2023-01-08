@@ -122,27 +122,14 @@ end
 ---The iterator can return an empty line while the process gets ready to output.
 ---@param proc process
 ---@param from? string | "stdout" | "stderr"
----@return fun():string
+---@return fun():integer,string
 function Backend:get_process_lines(proc, from)
-  from = from and "read_" .. from or "read_stdout"
+  local output = self:get_process_output(proc, from)
   return coroutine.wrap(function()
-    if not proc then return end
-    local output = ""
-    local read = proc[from](proc, 1)
-    repeat
-      if read == "\n" then
-        coroutine.yield(output)
-        output = ""
-      elseif read ~= nil and read ~= "" then
-        output = output .. read
-      else
-        -- let main loop yield until process is ready
-        coroutine.yield("")
-      end
-      read = proc[from](proc, 1)
-    until (read == nil or read == "") and not proc:running()
-    if output ~= "" then
-      coroutine.yield(output)
+    local line_num = 1
+    for line in (output.."\n"):gmatch("(.-)".."\n") do
+      coroutine.yield(line_num, line)
+      line_num = line_num + 1
     end
   end)
 end

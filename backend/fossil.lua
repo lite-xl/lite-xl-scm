@@ -30,13 +30,15 @@ function Fossil:get_branch(directory, callback)
   if cached then callback(cached, true) return end
   self:execute(function(proc)
     local branch = nil
-    for line in self:get_process_lines(proc, "stdout") do
+    for idx, line in self:get_process_lines(proc, "stdout") do
       local result = line:match("%s*%*%s*([^%s]+)")
       if result then
         branch = result
         break
       end
-      self:yield()
+      if idx % 50 == 0 then
+        self:yield()
+      end
     end
     self:add_to_cache("get_branch", branch, directory, 3)
     callback(branch)
@@ -152,11 +154,13 @@ function Fossil:get_stats(directory, callback)
     local inserts = 0
     local deletes = 0
     local last_line = ""
-    for line in self:get_process_lines(proc, "stdout") do
+    for idx, line in self:get_process_lines(proc, "stdout") do
       if line ~= "" then
         last_line = line
       end
-      self:yield()
+      if idx % 50 == 0 then
+        self:yield()
+      end
     end
     local i, d = last_line:match("%s*(%d+)%s+(%d+)")
     inserts = tonumber(i) or 0

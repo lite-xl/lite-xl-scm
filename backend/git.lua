@@ -82,12 +82,14 @@ function Git:get_staged(directory, callback)
   self:execute(function(proc)
     ---@type table<string,boolean>
     local staged = {}
-    for line in self:get_process_lines(proc, "stdout") do
+    for idx, line in self:get_process_lines(proc, "stdout") do
       if line ~= "" then
         local trimmed_file = line:gsub("^%s+", ""):gsub("%s+$", "")
         staged[trimmed_file] = true
       end
-      self:yield()
+      if idx % 50 == 0 then
+        self:yield()
+      end
     end
     self:add_to_cache("get_staged", staged, directory)
     callback(staged)
@@ -98,13 +100,15 @@ end
 function Git:get_branch(directory, callback)
   self:execute(function(proc)
     local branch = nil
-    for line in self:get_process_lines(proc, "stdout") do
+    for idx, line in self:get_process_lines(proc, "stdout") do
       local result = line:match("^[^%s]+")
       if result then
         branch = result
         break
       end
-      self:yield()
+      if idx % 50 == 0 then
+        self:yield()
+      end
     end
     callback(branch)
   end, directory, "rev-parse", "--abbrev-ref", "HEAD")
@@ -121,7 +125,7 @@ function Git:get_changes(directory, callback)
       ---@type plugins.scm.backend.filechange[]
       local changes = {}
       local added = {}
-      for line in self:get_process_lines(proc, "stdout") do
+      for idx, line in self:get_process_lines(proc, "stdout") do
         if line ~= "" then
           local status, path = line:match("%s*(%S+)%s+(%S+)")
           local new_path = nil
@@ -147,7 +151,9 @@ function Git:get_changes(directory, callback)
             added[path] = true
           end
         end
-        self:yield()
+        if idx % 50 == 0 then
+          self:yield()
+        end
       end
       self:add_to_cache("get_changes", changes, directory)
       callback(changes)
@@ -215,13 +221,15 @@ function Git:get_stats(directory, callback)
   self:execute(function(proc)
     local inserts = 0
     local deletes = 0
-    for line in self:get_process_lines(proc, "stdout") do
+    for idx, line in self:get_process_lines(proc, "stdout") do
       if line ~= "" then
         local i, d = line:match("%s*(%d+)%s+(%d+)")
         inserts = inserts + (tonumber(i) or 0)
         deletes = deletes + (tonumber(d) or 0)
       end
-      self:yield()
+      if idx % 50 == 0 then
+        self:yield()
+      end
     end
     callback({inserts = inserts, deletes = deletes})
   end, directory, "diff", "--numstat")
