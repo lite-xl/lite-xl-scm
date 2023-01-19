@@ -3,7 +3,7 @@
     {
       "id": "scm",
       "name": "Source Control Management",
-      "description": "Base functionality that allows you to easily add support for any source control management system.",
+      "description": "Extensible source control management plugin with git and fossil backends.",
       "version": "0.1",
       "mod_version": "3",
       "dependencies": {
