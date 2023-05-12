@@ -161,22 +161,25 @@ end
 ---@param ... string parameters to pass to associated command
 function Backend:execute(callback, directory, ...)
   local command = table.pack(self.command, ...)
-  local proc, errmsg, errcode = process.start(command, {cwd = directory})
-  if not self.blocking then
-    core.add_thread(function()
+  local proc, errmsg, errcode
+  local ran, ranerr = core.try(function()
+    proc, errmsg, errcode = process.start(command, {cwd = directory})
+    if not self.blocking then
+      core.add_thread(function()
+        callback(proc, errmsg, errcode)
+        if proc and proc:running() then proc:kill() end
+      end)
+    else
       callback(proc, errmsg, errcode)
       if proc and proc:running() then proc:kill() end
-    end)
-  else
-    callback(proc, errmsg, errcode)
-    if proc and proc:running() then proc:kill() end
-  end
+    end
+  end)
   if not proc then
+    local msg_code = ran and {errmsg, errcode} or {ranerr, "-1"}
     core.error(
       "[SCM error]: error while executing '%s' - %s:%s",
       table.concat(command, " "),
-      errmsg,
-      errcode
+      table.unpack(msg_code)
     )
   end
 end
