@@ -25,11 +25,25 @@ local Object = require "core.object"
 ---@field expires number
 ---@field value any
 
+---@class plugins.scm.backend.commit
+---@field hash string
+---@field author string
+---@field date string
+---@field summary string
+---@field message string
+
+---@class plugins.scm.backend.blame
+---@field commit string
+---@field author string
+---@field date string
+
 ---@alias plugins.scm.backend.onexecute fun(proc?:process, errmsg?:string, errcode?:number)
 ---@alias plugins.scm.backend.ongetdiff fun(diff?:string, cached?:boolean)
 ---@alias plugins.scm.backend.ongetbranch fun(branch?:string, cached?:boolean)
 ---@alias plugins.scm.backend.ongetchanges fun(changes:plugins.scm.backend.filechange[], cached?:boolean)
+---@alias plugins.scm.backend.ongetcommit fun(changes:plugins.scm.backend.commit, cached?:boolean)
 ---@alias plugins.scm.backend.ongetfilestatus fun(status?:plugins.scm.backend.filestatus, cached?:boolean)
+---@alias plugins.scm.backend.ongetfileblame fun(list?:plugins.scm.backend.blame[], cached?:boolean)
 ---@alias plugins.scm.backend.ongetstaged fun(files?:table<string,boolean>, cached?:boolean)
 ---@alias plugins.scm.backend.ongetstats fun(stats?:plugins.scm.backend.stats, cached?:boolean)
 ---@alias plugins.scm.backend.ongetstatus fun(status?:string, cached?:boolean)
@@ -51,6 +65,7 @@ function Backend:new(name, command)
   self.name = name
   self.command = command
   self.cache = {}
+  self.next_clean = os.time() + 20
   self.blocking = false
 end
 
@@ -96,10 +111,30 @@ function Backend:add_to_cache(name, value, path, expires)
   end
 end
 
+---Removes all expired cached elements.
+function Backend:clean_cache()
+  local current_time = os.time()
+
+  if self.next_clean > current_time then return end
+
+  local deleted = 0
+  for i=1, #self.cache do
+    local cache = self.cache[i-deleted]
+    if cache.expires < current_time then
+      table.remove(self.cache, i-deleted)
+      deleted = deleted + 1
+    end
+  end
+
+  self.next_clean = current_time + 20
+end
+
 ---Get a value that was previously stored on the cache.
 ---@param name string
 ---@param path string
 function Backend:get_from_cache(name, path)
+  self:clean_cache()
+
   local found = nil
   for i, cache in ipairs(self.cache) do
     if cache.name == name and cache.path == path then
@@ -187,6 +222,7 @@ end
 ---Check if given directory is source controlled by current backend.
 ---@param directory string Project directory
 ---@return boolean detected
+---@diagnostic disable-next-line
 function Backend:detect(directory) return false end
 
 ---Report if the backend has a staging area.
@@ -197,78 +233,113 @@ function Backend:has_staging() return false end
 ---@param file string Absolute path to file
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.onexecstatus
+---@diagnostic disable-next-line
 function Backend:stage_file(file, directory, callback) callback(false, "not implemented") end
 
 ---Remove a file path from staging area.
 ---@param file string Absolute path to file
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.onexecstatus
+---@diagnostic disable-next-line
 function Backend:unstage_file(file, directory, callback) callback(false, "not implemented") end
 
 ---Retrieve the list of all staged files.
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.ongetstaged
+---@diagnostic disable-next-line
 function Backend:get_staged(directory, callback) callback(nil) end
 
 ---Retrieve the current branch.
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.ongetbranch
+---@diagnostic disable-next-line
 function Backend:get_branch(directory, callback) callback(nil) end
 
 ---Retrieve a list of file changes.
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.ongetchanges
+---@diagnostic disable-next-line
 function Backend:get_changes(directory, callback) callback({}, false) end
 
----Retrieve the entire project unified diff for the given file.
+---Retrieve the entire project unified diff.
+---@param id string Hash of the commit
+---@param directory string Project directory
+---@param callback plugins.scm.backend.ongetcommit
+---@diagnostic disable-next-line
+function Backend:get_commit_info(id, directory, callback) callback(nil) end
+
+---Retrieve the diff for a given commit.
+---@param id string Hash of the commit
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.ongetdiff
+---@diagnostic disable-next-line
+function Backend:get_commit_diff(id, directory, callback) callback(nil) end
+
+---Retrieve the entire project unified diff.
+---@param directory string Project directory
+---@param callback plugins.scm.backend.ongetdiff
+---@diagnostic disable-next-line
 function Backend:get_diff(directory, callback) callback(nil) end
 
 ---Retrieve the unified diff for the given file.
 ---@param file string Absolute path to file
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.ongetdiff
+---@diagnostic disable-next-line
 function Backend:get_file_diff(file, directory, callback) callback(nil) end
 
 ---Retrieve the current status of the given file.
 ---@param file string Absolute path to file
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.ongetfilestatus
+---@diagnostic disable-next-line
 function Backend:get_file_status(file, directory, callback) callback("unchanged") end
+
+---Retrieve the blame information for every line on a file.
+---@param file string Absolute path to file
+---@param directory string Project directory
+---@param callback plugins.scm.backend.ongetfileblame
+---@diagnostic disable-next-line
+function Backend:get_file_blame(file, directory, callback) callback(nil) end
 
 ---Retrieve insertion and deletion stats for an entire project.
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.ongetstats
+---@diagnostic disable-next-line
 function Backend:get_stats(directory, callback) callback({0, 0}) end
 
 ---Retrieve the status description for an entire repo.
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.ongetstatus
+---@diagnostic disable-next-line
 function Backend:get_status(directory, callback) callback(nil) end
 
 ---Pull latest changes.
 ---TODO: this is a WIP we should handle remote and branch
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.onexecstatus
+---@diagnostic disable-next-line
 function Backend:pull(directory, callback) callback(false, "not implemented") end
 
 ---Restore a file to its previous HEAD state before any changes.
 ---@param file string Absolute path to file
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.onexecstatus
+---@diagnostic disable-next-line
 function Backend:revert_file(file, directory, callback) callback(false, "not implemented") end
 
 ---Add a directory or file to repository
 ---@param path string Absolute path to file
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.onexecstatus
+---@diagnostic disable-next-line
 function Backend:add_path(path, directory, callback) callback(false, "not implemented") end
 
 ---Remove a file or directory from repository without deleting it.
 ---@param path string Absolute path to file
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.onexecstatus
+---@diagnostic disable-next-line
 function Backend:remove_path(path, directory, callback) callback(false, "not implemented") end
 
 ---Rename a path of a directory or file in the repository.
@@ -276,6 +347,7 @@ function Backend:remove_path(path, directory, callback) callback(false, "not imp
 ---@param to string Destination of from path
 ---@param directory string Project directory
 ---@param callback plugins.scm.backend.onexecstatus
+---@diagnostic disable-next-line
 function Backend:move_path(from, to, directory, callback) callback(false, "not implemented") end
 
 

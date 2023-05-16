@@ -161,6 +161,53 @@ function Git:get_changes(directory, callback)
   end)
 end
 
+---@param id string
+---@param directory string
+---@param callback plugins.scm.backend.ongetcommit
+function Git:get_commit_info(id, directory, callback)
+  self:execute(function(proc)
+    ---@type plugins.scm.backend.commit
+    local commit = {}
+    for idx, line in self:get_process_lines(proc, "stdout") do
+      if not commit.hash then
+        commit.hash = line:match("commit%s+([a-zA-Z0-9]+)$")
+      elseif not commit.author then
+        commit.author = line:match("Author:%s+(.+)$")
+      elseif not commit.date then
+        commit.date = line:match("Date:%s+(.+)$")
+      elseif not commit.summary then
+        commit.summary = line:match("    (.+)")
+      else
+        if commit.message then
+          commit.message = commit.message .. "\n" .. (line:match("    (.+)") or "")
+        elseif line ~= "" then
+          local message = line:match("    (.+)")
+          if message then
+            commit.message = (line:match("    (.*)") or "")
+          end
+        end
+        if idx % 10 == 0 then self:yield() end
+      end
+    end
+
+    if commit.message then
+      commit.message = commit.message:match("(.*)%s+$")
+    end
+
+    callback(commit)
+  end, directory, "show", "--no-patch", id)
+end
+
+---@param id string
+---@param directory string
+---@param callback plugins.scm.backend.ongetdiff
+function Git:get_commit_diff(id, directory, callback)
+  self:execute(function(proc)
+    local diff = self:get_process_output(proc, "stdout")
+    callback(diff)
+  end, directory, "show", "-U", id)
+end
+
 ---@param directory string
 ---@param callback plugins.scm.backend.ongetdiff
 function Git:get_diff(directory, callback)
@@ -214,6 +261,37 @@ function Git:get_file_status(file, directory, callback)
     self:add_to_cache("get_file_status", status, file, 1)
     callback(status)
   end, directory, "status", "-s", common.relative_path(directory, file))
+end
+
+---@param file string
+---@param directory string
+---@param callback plugins.scm.backend.ongetfileblame
+function Git:get_file_blame(file, directory, callback)
+  local cached = self:get_from_cache("get_file_blame", file)
+  if cached then callback(cached, true) return end
+  self:execute(function(proc)
+    ---@type plugins.scm.backend.blame[]
+    local list = {}
+    for idx, line in self:get_process_lines(proc, "stdout") do
+      if line ~= "" then
+        local commit, author, date = line:match(
+          "^%^?([A-Fa-f0-9]+) %((.-) (%d%d%d%d%-%d%d%-%d%d)"
+        )
+        if commit then
+          table.insert(list, {
+            commit = commit,
+            author = author:match("^%s*(.-)%s*$"), -- trim spaces
+            date = date
+          })
+        end
+      end
+      if idx % 100 == 0 then
+        self:yield()
+      end
+    end
+    self:add_to_cache("get_file_blame", list, file, 10)
+    callback(#list > 0 and list or nil)
+  end, directory, "blame", common.relative_path(directory, file))
 end
 
 ---@param callback plugins.scm.backend.ongetstats

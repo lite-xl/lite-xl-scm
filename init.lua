@@ -61,6 +61,10 @@ config.plugins.smc = common.merge({
 ---@class plugins.scm
 local scm = {}
 
+---Show the blame information of active line.
+---@type boolean
+scm.show_blame = false
+
 ---Backends shipped with the plugin.
 ---@type plugins.scm.backend[]
 local BACKENDS = { Git(), Fossil() }
@@ -129,6 +133,29 @@ local function update_doc_diff(doc)
     end
   end
   doc.scm_diff = nil
+end
+
+---@param doc core.doc
+local function update_doc_blame(doc)
+  if not scm.show_blame then
+    if doc.blame_list then doc.blame_list = nil end
+    return
+  end
+  if doc.abs_filename then
+    local project_dir = util.get_file_project_dir(doc.abs_filename)
+    if project_dir and PROJECTS[project_dir] then
+      local backend = PROJECTS[project_dir]
+      backend:get_file_blame(doc.abs_filename, project_dir, function(list)
+        if list and #list > 0 then
+          doc.blame_list = list
+        else
+          doc.blame_list = nil
+        end
+      end)
+      return
+    end
+  end
+  if doc.blame_list then doc.blame_list = nil end
 end
 
 ---@param path string
@@ -359,6 +386,24 @@ function scm.open_path_diff(path)
         else
           core.warn("SCM: seems like the path only contains untracked files.")
         end
+      end
+    end)
+  end
+end
+
+function scm.open_commit_diff(commit, project_dir)
+  local backend = PROJECTS[project_dir]
+  if backend then
+    core.log("SCM: generating the diff please wait...")
+    backend:get_commit_diff(commit, project_dir, function(diff)
+      if diff and diff ~= "" then
+        local title = string.format("[%s].diff", commit)
+        ---@type plugins.scm.readdoc
+        local diffdoc = ReadDoc(title, title)
+        diffdoc:set_text(diff)
+        core.root_view:open_doc(diffdoc)
+      else
+        core.warn("SCM: could not retrieve the commit diff.")
       end
     end)
   end
@@ -635,16 +680,28 @@ core.add_thread(function()
 end)
 
 --------------------------------------------------------------------------------
--- Override Doc to register diff changes
+-- Override Doc to register diff changes and blame history
 --------------------------------------------------------------------------------
 local doc_save = Doc.save
-function Doc:save(...) doc_save(self, ...) update_doc_diff(self) end
+function Doc:save(...)
+  doc_save(self, ...)
+  update_doc_diff(self)
+  update_doc_blame(self)
+end
 
 local doc_new = Doc.new
-function Doc:new(...) doc_new(self, ...) update_doc_diff(self) end
+function Doc:new(...)
+  doc_new(self, ...)
+  update_doc_diff(self)
+  update_doc_blame(self)
+end
 
 local doc_load = Doc.load
-function Doc:load(...) doc_load(self, ...) update_doc_diff(self) end
+function Doc:load(...)
+  doc_load(self, ...)
+  update_doc_diff(self)
+  update_doc_blame(self)
+end
 
 local doc_raw_insert = Doc.raw_insert
 function Doc:raw_insert(line, col, text, undo_stack, time)
@@ -680,7 +737,7 @@ function Doc:raw_remove(line1, col1, line2, col2, undo_stack, time)
 end
 
 --------------------------------------------------------------------------------
--- Override DocView to draw changes on gutter
+-- Override DocView to draw changes on gutter and blame tooltip
 --------------------------------------------------------------------------------
 local DIFF_WIDTH = 3
 local docview_draw_line_gutter = DocView.draw_line_gutter
@@ -745,6 +802,85 @@ function DocView:get_gutter_width()
   end
   return docview_get_gutter_width(self)
     + style.padding.x * DIFF_WIDTH / 12
+end
+
+local function draw_tooltip(text, x, y)
+  local font = style.font
+  local lh = font:get_height()
+  local ty = y + lh + (2 * style.padding.y)
+  local width = 0
+
+  local lines = {}
+  for line in string.gmatch(text.."\n", "(.-)\n") do
+    width = math.max(width, font:get_width(line))
+    table.insert(lines, line)
+  end
+
+  y = y + lh + style.padding.y
+
+  local height = #lines * font:get_height()
+
+  renderer.draw_rect(
+    x, y,
+    width + style.padding.x * 2, height + style.padding.y * 2,
+    style.background3
+  )
+
+  for _, line in pairs(lines) do
+    common.draw_text(
+      font, style.text, line, "left",
+      x + style.padding.x, ty,
+      width, lh
+    )
+    ty = ty + lh
+  end
+end
+
+local docview_draw = DocView.draw
+function DocView:draw()
+    docview_draw(self)
+
+    if not self.doc or not scm.get_backend() or not self.doc.blame_list then
+      return
+    end
+
+    local line = self.doc:get_selection()
+    local info = self.doc.blame_list[line]
+
+    if info then
+      local x, y = self:get_line_screen_position(line)
+      local backend = scm.get_path_backend(self.doc.abs_filename)
+      if backend then
+        local text
+
+        if not info.text then
+          text = string.format(
+            "%s Blame | %s | (%s) %s",
+            backend.name, info.commit, info.author, info.date
+          )
+        end
+
+        draw_tooltip(info.text or text, x, y)
+
+        if not info.text and not info.getting then
+          info.getting = true
+          backend:get_commit_info(
+            info.commit,
+            util.get_project_dir(self.doc.abs_filename) or "",
+            function(commit)
+              local message = commit.summary or ""
+              if commit.message then
+                message = message .. "\n\n" .. commit.message
+              end
+              info.text = string.format(
+                "%s Blame | %s | (%s) %s | %s",
+                backend.name, info.commit, info.author, info.date, message
+              )
+            end
+          )
+        end
+      end
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -824,6 +960,35 @@ command.add(
   ["scm:project-status"] = function(project_dir)
     scm.open_project_status(project_dir)
   end
+})
+
+command.add(nil, {
+  ["scm:toggle-blame"] = function()
+    scm.show_blame = not scm.show_blame
+    for _, doc in ipairs(core.docs) do
+      update_doc_blame(doc)
+    end
+    core.log(
+      "SCM: %s blame information",
+      scm.show_blame and "showing" or "hiding"
+    )
+  end
+})
+
+command.add(
+  function()
+    local doc = util.get_current_doc()
+    return scm.show_blame and doc.blame_list, doc
+  end, {
+
+  ["scm:view-blame-diff"] = function(doc)
+    ---@cast doc core.doc
+    local line = doc:get_selection()
+    scm.open_commit_diff(
+      doc.blame_list[line].commit,
+      util.get_file_project_dir(doc.abs_filename)
+    )
+	end
 })
 
 command.add(
@@ -960,8 +1125,10 @@ command.add(
 -- Keymaps
 --------------------------------------------------------------------------------
 keymap.add {
-  ["ctrl+alt+["]    = "scm:goto-previous-change",
-  ["ctrl+alt+]"]  = "scm:goto-next-change"
+  ["ctrl+alt+["]  = "scm:goto-previous-change",
+  ["ctrl+alt+]"]  = "scm:goto-next-change",
+  ["ctrl+alt+b"]  = "scm:toggle-blame",
+  ["alt+b"]       = "scm:view-blame-diff",
 }
 
 --------------------------------------------------------------------------------
