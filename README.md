@@ -20,10 +20,10 @@ implement your own.
 You will need to have the SCM binaries installed and accesible from
 your `PATH` environment variable:
 
-* [git](https://git-scm.com/) - for projects versioned in git
-* [fossil](https://www.fossil-scm.org/) - for projects versioned in fossil
-* [language_diff](https://github.com/lite-xl/lite-xl-plugins/blob/master/plugins/language_diff.lua) plugin, optional but recommended
-* [Widgets](https://github.com/lite-xl/lite-xl-widgets) for confirmation messages, etc...
+* [git] - for projects versioned in git
+* [fossil] - for projects versioned in fossil
+* [language_diff] plugin - optional but recommended
+* [Widgets] - for confirmation messages, etc...
 
 Follow the usual plugin installation procedure. When opening projects the
 backend will be auto detected by using the backend's `detect()` method. Then
@@ -45,15 +45,17 @@ it will be associated to the project for subsequente use.
   - additions
   - deletions
   - modifications
+* Display blame information for active document line.
+  - View the diff changes for the associated commit.
 
 ## TODO
 
 There is still missing functionality, but some of the following comes to mind:
 
 - [ ] Pull and push
-- [ ] detecting if the SCM binaries are missing
-- [ ] maybe... allow configuring the SCM binaries path
-- [ ] colorize tabs text depending on the file status
+- [x] detecting if the SCM binaries are missing
+- [x] maybe... allow configuring the SCM binaries path
+- [ ] maybe colorize tabs text depending on the file status
 - [x] restoring a file to a previous state
 - [ ] view the commit history of project or file
 - [x] view diff of a specific file: `scm:file-diff`
@@ -65,6 +67,13 @@ not listed above.
 
 ## Credits
 
-Thanks to the authors of [gitdiff](https://github.com/vincens2005/lite-xl-gitdiff-highlight)
-and [gitstatus](https://github.com/lite-xl/lite-xl-plugins/blob/master/plugins/gitstatus.lua)
+Thanks to the authors of [gitdiff], [gitstatus] and [gitblame]
 which code served as a source of copy-pasting and inspiration!
+
+[git]: https://git-scm.com/
+[fossil]: https://www.fossil-scm.org/
+[language_diff]: https://github.com/lite-xl/lite-xl-plugins/blob/master/plugins/language_diff.lua
+[Widgets]: https://github.com/lite-xl/lite-xl-widgets
+[gitdiff]: https://github.com/vincens2005/lite-xl-gitdiff-highlight
+[gitstatus]: https://github.com/lite-xl/lite-xl-plugins/blob/master/plugins/gitstatus.lua
+[gitblame]: https://github.com/juliardi/lite-xl-gitblame
