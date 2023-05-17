@@ -25,12 +25,20 @@ local Git = require "plugins.scm.backend.git"
 local Fossil = require "plugins.scm.backend.fossil"
 local MessageBox = require "libraries.widget.messagebox"
 
+---Backends shipped with the plugin.
+---@type table<string,plugins.scm.backend>
+local BACKENDS
+
 ---@class config.plugins.smc
 ---@field highlighter boolean
 ---@field highlighter_alignment "right" | "left"
+---@field git_path string
+---@field fossil_path string
 config.plugins.smc = common.merge({
   highlighter = true,
   highlighter_alignment = "right",
+  git_path = "git",
+  fossil_path = "fossil",
   config_spec = {
     name = "Source Control Management",
     {
@@ -50,9 +58,40 @@ config.plugins.smc = common.merge({
         {"Left", "left"},
         {"Right", "right"}
       }
+    },
+    {
+      label = "Git Path",
+      description = "Path to the Git binary.",
+      path = "git_path",
+      type = "FILE",
+      default = "git",
+      filters = {"git$", "git%.exe$"},
+      on_apply = function(value)
+        if not BACKENDS.Git:set_command(value) then
+          BACKENDS.Git:set_command(common.basename(value))
+        end
+      end
+    },
+    {
+      label = "Fossil Path",
+      description = "Path to the Fossil binary.",
+      path = "fossil_path",
+      type = "FILE",
+      default = "fossil",
+      filters = {"fossil$", "fossil%.exe$"},
+      on_apply = function(value)
+        if not BACKENDS.Fossil:set_command(value) then
+          BACKENDS.Fossil:set_command(common.basename(value))
+        end
+      end
     }
   }
 }, config.plugins.smc)
+
+-- initialize backends
+BACKENDS = { Git = Git(), Fossil = Fossil() }
+BACKENDS.Git:set_command(config.plugins.smc.git_path)
+BACKENDS.Fossil:set_command(config.plugins.smc.fossil_path)
 
 ---@class plugins.scm.filechange : plugins.scm.backend.filechange
 ---@field color renderer.color?
@@ -64,10 +103,6 @@ local scm = {}
 ---Show the blame information of active line.
 ---@type boolean
 scm.show_blame = false
-
----Backends shipped with the plugin.
----@type plugins.scm.backend[]
-local BACKENDS = { Git(), Fossil() }
 
 ---List of loaded projects current branch.
 ---@type table<string, string>
@@ -89,7 +124,7 @@ setmetatable(PROJECTS, {
     if k == nil then return nil end
     local v = rawget(t, k)
     if v == nil then
-      for _, backend in ipairs(BACKENDS) do
+      for _, backend in pairs(BACKENDS) do
         if backend:detect(k) then
           v = backend
           backend:get_branch(k, function(branch)
@@ -332,18 +367,13 @@ end
 ---Add a new SCM backend.
 ---@param backend plugins.scm.backend
 function scm.register_backend(backend)
-  table.insert(BACKENDS, backend)
+  BACKENDS[backend.name] = backend
 end
 
 ---Remove an existing SCM backend.
 ---@param name string
 function scm.unregister_backend(name)
-  for i, backend in ipairs(BACKENDS) do
-    if backend.name == name then
-      table.remove(BACKENDS, i)
-      break
-    end
-  end
+  BACKENDS[name] = nil
 end
 
 ---@param project_dir? string

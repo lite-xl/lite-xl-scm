@@ -13,6 +13,7 @@ function Fossil:new()
 end
 
 function Fossil:detect(directory)
+  if not self.command then return false end
   local list = system.list_dir(directory)
   if list then
     for _, file in ipairs(list) do

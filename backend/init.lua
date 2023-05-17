@@ -1,4 +1,5 @@
 local core = require "core"
+local util = require "plugins.scm.util"
 local Object = require "core.object"
 
 ---@alias plugins.scm.backend.filestatus
@@ -63,10 +64,22 @@ local Backend = Object:extend()
 ---@param command string
 function Backend:new(name, command)
   self.name = name
-  self.command = command
   self.cache = {}
   self.next_clean = os.time() + 20
   self.blocking = false
+  self:set_command(command)
+end
+
+---Set the path to the scm executable.
+---@param command string
+---@return boolean found
+function Backend:set_command(command)
+  if util.command_exists(command) then
+    self.command = command
+    return true
+  end
+  self.command = nil
+  return false
 end
 
 ---Execute coroutine.yield if blocking mode is disabled.
@@ -195,6 +208,7 @@ end
 ---@param directory string Path of project directory
 ---@param ... string parameters to pass to associated command
 function Backend:execute(callback, directory, ...)
+  if not self.command then return end
   local command = table.pack(self.command, ...)
   local proc, errmsg, errcode
   local ran, ranerr = core.try(function()

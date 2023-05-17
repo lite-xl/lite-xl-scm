@@ -13,6 +13,7 @@ function Git:new()
 end
 
 function Git:detect(directory)
+  if not self.command then return false end
   local list = system.list_dir(directory)
   if list then
     for _, file in ipairs(list) do
